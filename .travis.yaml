@@ -1,28 +1,27 @@
 sudo: required
+
 services:
   - docker
+
 env:
   global:
     - SHA=$(git rev-parse HEAD)
-    - aws_cli_auto_prompt=off
+    - CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
 before_install:
-  # Install kubectl
-  - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-  - chmod +x ./kubectl
-  - sudo mv ./kubectl /usr/local/bin/kubectl
-  # Install AWS CLI
-  - if ! [ -x "$(command -v aws)" ]; then curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" ; unzip awscliv2.zip ; sudo ./aws/install ; fi
-  # export environment variables for AWS CLI (using Travis environment variables)
-  - export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-  - export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-  - export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
-  # Setup kubectl config to use the desired AWS EKS cluster
-  - aws eks update-kubeconfig --region ${AWS_DEFAULT_REGION} --name ${AWS_EKS_CLUSTER_NAME}
+  - curl https://sdk.cloud.google.com | bash > /dev/null;
+  - source $HOME/google-cloud-sdk/path.bash.inc
+  - gcloud component update kubectl
+  - gcloud auth activate-service-account --key-file service-account.json
+  - openssl aes-256-cbc -K $encrypted_9f3b5599b056_key -iv $encrypted_9f3b5599b056_iv -in service-account.json.enc -out service-account.json -d
+  - gcloud config set project k8s-project-315608
+  - gcloud config set compute/zone europe-west1-b
+  - gcloud container clusters get-credentials multi-cluster
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   - docker build -t krassuss/react-test -f ./client/Dockerfile.dev ./client
 
 script:
-  - docker run krassuss/react-test npm test -- --coverage
+  - docker run -e CI=true krassuss/react-test npm test
 
 deploy:
   provider: script
